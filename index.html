@@ -223,16 +223,15 @@ function uploadFotos(cb){
   function proximo(){
     if(idx>=fotosParaEnviar.length){cb(ids);return;}
     var file=fotosParaEnviar[idx];
-    atualizarLoading('Enviando foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
-    var reader=new FileReader();
-    reader.onload=function(e){
-      var b64=e.target.result.split(',')[1];
+    atualizarLoading('Comprimindo foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
+    comprimirImagem(file, function(b64, mime, nome){
+      atualizarLoading('Enviando foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
       var CHUNK=30000, chunks=[], ci=0;
       for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.substring(i,i+CHUNK));
       var uid='ch_'+Date.now()+'_'+idx;
       function envChunk(){
         if(ci>=chunks.length){
-          chamarScript({acao:'finalizarFoto',dados:JSON.stringify({uploadId:uid,nome:file.name,mime:file.type,totalChunks:chunks.length}),t:Date.now()},
+          chamarScript({acao:'finalizarFoto',dados:JSON.stringify({uploadId:uid,nome:nome,mime:mime,totalChunks:chunks.length}),t:Date.now()},
           function(d){if(d.ok&&d.id)ids.push(d.id);idx++;proximo();});
           return;
         }
@@ -240,8 +239,7 @@ function uploadFotos(cb){
         function(d){if(d.ok){ci++;envChunk();}else{idx++;proximo();}});
       }
       envChunk();
-    };
-    reader.readAsDataURL(file);
+    });
   }
   proximo();
 }
