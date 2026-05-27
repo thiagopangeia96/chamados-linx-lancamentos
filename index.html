@@ -310,9 +310,8 @@ function toast(msg){
   t.textContent=msg;t.className='toast show';
   setTimeout(function(){t.className='toast';},2800);
 }
-</script>
-</body>
-</html>function comprimirImagem(file, cb){
+
+function comprimirImagem(file, cb){
   // Tenta createImageBitmap (mais leve, sem problema de EXIF no mobile)
   if(window.createImageBitmap){
     createImageBitmap(file, {resizeWidth:900, resizeHeight:900, resizeQuality:'medium'}).then(function(bmp){
