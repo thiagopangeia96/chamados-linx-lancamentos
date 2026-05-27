@@ -70,12 +70,22 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--lav-l);min
       <div class="card-title">Novo chamado</div>
 
       <div class="field">
-        <label>Motivo <span style="color:var(--bad)">*</span></label>
-        <input type="text" id="motivo" placeholder="Resumo curto do problema...">
+        <label>Grupo <span style="color:var(--bad)">*</span></label>
+        <select id="grupo" onchange="carregarSubgrupos()"><option value="">Selecione o grupo...</option></select>
       </div>
 
       <div class="field">
-        <label>Impacto <span style="color:var(--bad)">*</span></label>
+        <label>Subgrupo <span style="color:var(--bad)">*</span></label>
+        <select id="subgrupo"><option value="">Selecione o grupo primeiro...</option></select>
+      </div>
+
+      <div class="field">
+        <label>Descrição do problema <span style="color:var(--bad)">*</span></label>
+        <textarea id="descricao" rows="3" placeholder="Descreva o problema encontrado..."></textarea>
+      </div>
+
+      <div class="field">
+        <label>Impacto <span style="color:var(--txt-s)">(opcional)</span></label>
         <textarea id="impacto" placeholder="Descreva o impacto do problema no sistema ou processo..."></textarea>
       </div>
 
@@ -95,7 +105,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--lav-l);min
       </div>
 
       <div class="field">
-        <label>Área / Setor <span style="color:var(--bad)">*</span></label>
+        <label>Área / Setor afetado <span style="color:var(--bad)">*</span></label>
         <select id="setor"><option value="">Carregando setores...</option></select>
       </div>
 
@@ -129,6 +139,7 @@ var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7wEV4Fc2AB-Cs66znti0
 var fotosParaEnviar = [];
 
 window.addEventListener('load', function(){
+  carregarGrupos();
   carregarSetores();
 });
 
@@ -138,6 +149,28 @@ function chamarScript(params, cb){
   }).join('&')+'&t='+Date.now();
   fetch(url).then(function(r){return r.json();}).then(cb)
     .catch(function(){cb({erro:'Erro de conexão'});});
+}
+
+var _gruposData = {};
+
+function carregarGrupos(){
+  chamarScript({acao:'grupos'}, function(d){
+    if(d.erro||!d.grupos) return;
+    _gruposData = d.grupos;
+    var sel = document.getElementById('grupo');
+    sel.innerHTML = '<option value="">Selecione o grupo...</option>'
+      + Object.keys(d.grupos).map(function(g){
+          return '<option>'+g+'</option>';
+        }).join('');
+  });
+}
+
+function carregarSubgrupos(){
+  var grupo = document.getElementById('grupo').value;
+  var sel = document.getElementById('subgrupo');
+  var subs = _gruposData[grupo]||[];
+  sel.innerHTML = '<option value="">Selecione o subgrupo...</option>'
+    + subs.map(function(s){ return '<option>'+s+'</option>'; }).join('');
 }
 
 function carregarSetores(){
@@ -193,19 +226,21 @@ function removerFoto(idx){
 }
 
 function enviarChamado(){
-  var motivo=document.getElementById('motivo').value.trim();
+  var grupo=document.getElementById('grupo').value;
+  var subgrupo=document.getElementById('subgrupo').value;
+  var descricao=document.getElementById('descricao').value.trim();
   var impacto=document.getElementById('impacto').value.trim();
   var urgencia=document.getElementById('urgencia').value;
   var solicitante=document.getElementById('solicitante').value.trim();
   var setor=document.getElementById('setor').value;
-  if(!motivo||!impacto||!urgencia||!solicitante||!setor){
+  if(!grupo||!subgrupo||!descricao||!urgencia||!solicitante||!setor){
     toast('Preencha todos os campos obrigatórios');return;
   }
   mostrarLoading('Enviando chamado...');
   uploadFotos(function(fotosIds){
     chamarScript({
       acao:'abrirChamado',
-      dados:JSON.stringify({motivo:motivo,impacto:impacto,urgencia:urgencia,solicitante:solicitante,setor:setor,fotos:fotosIds})
+      dados:JSON.stringify({grupo:grupo,subgrupo:subgrupo,descricao:descricao,impacto:impacto,urgencia:urgencia,solicitante:solicitante,setor:setor,fotos:fotosIds})
     }, function(d){
       esconderLoading();
       if(d.ok){
@@ -225,6 +260,7 @@ function uploadFotos(cb){
     var file=fotosParaEnviar[idx];
     atualizarLoading('Comprimindo foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
     comprimirImagem(file, function(b64, mime, nome){
+      if(!b64){toast('Foto '+(idx+1)+' muito grande, ignorada');idx++;proximo();return;}
       atualizarLoading('Enviando foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
       var CHUNK=30000, chunks=[], ci=0;
       for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.substring(i,i+CHUNK));
@@ -247,7 +283,106 @@ function uploadFotos(cb){
 function novoChamado(){
   document.getElementById('sucesso').classList.remove('show');
   document.getElementById('formulario').style.display='block';
-  document.getElementById('motivo').value='';
+  document.getElementById('grupo').selectedIndex=0;
+  document.getElementById('subgrupo').innerHTML='<option value="">Selecione o grupo primeiro...</option>';
+  document.getElementById('descricao').value='';
+  document.getElementById('impacto').value='';
+  document.getElementById('urgencia').value='';
+  document.getElementById('solicitante').value='';
+  document.getElementById('setor').selectedIndex=0;
+  document.querySelectorAll('.urg-btn').forEach(function(b){b.className='urg-btn';});
+  fotosParaEnviar=[];
+  document.getElementById('fotosPrev').innerHTML='';
+}
+
+function mostrarLoading(txt){
+  document.getElementById('loadingTxt').textContent=txt||'Enviando...';
+  document.getElementById('loadingOv').classList.add('show');
+  document.getElementById('btnEnviar').disabled=true;
+}
+function atualizarLoading(txt){document.getElementById('loadingTxt').textContent=txt;}
+function esconderLoading(){
+  document.getElementById('loadingOv').classList.remove('show');
+  document.getElementById('btnEnviar').disabled=false;
+}
+function toast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show';
+  setTimeout(function(){t.className='toast';},2800);
+}
+</script>
+</body>
+</html>function comprimirImagem(file, cb){
+  // Tenta createImageBitmap (mais leve, sem problema de EXIF no mobile)
+  if(window.createImageBitmap){
+    createImageBitmap(file, {resizeWidth:900, resizeHeight:900, resizeQuality:'medium'}).then(function(bmp){
+      var canvas=document.createElement('canvas');
+      canvas.width=bmp.width; canvas.height=bmp.height;
+      canvas.getContext('2d').drawImage(bmp,0,0);
+      bmp.close && bmp.close();
+      cb(canvas.toDataURL('image/jpeg',0.65).split(',')[1],'image/jpeg',file.name.replace(/[.][^.]+$/,'.jpg'));
+    }).catch(function(){ fallbackComprimir(file,cb); });
+  } else {
+    fallbackComprimir(file,cb);
+  }
+}
+
+function fallbackComprimir(file, cb){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    var done=false;
+    var t=setTimeout(function(){if(!done){done=true;cb(null);}},6000);
+    img.onload=function(){
+      clearTimeout(t);if(done)return;done=true;
+      var MAX=900,w=img.width,h=img.height;
+      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+      if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}
+      var cv=document.createElement('canvas');
+      cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      cb(cv.toDataURL('image/jpeg',0.65).split(',')[1],'image/jpeg',file.name.replace(/[.][^.]+$/,'.jpg'));
+    };
+    img.onerror=function(){clearTimeout(t);if(!done){done=true;cb(null);}};
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function uploadFotos(cb){
+  if(!fotosParaEnviar.length){cb([]);return;}
+  var ids=[], idx=0;
+  function proximo(){
+    if(idx>=fotosParaEnviar.length){cb(ids);return;}
+    var file=fotosParaEnviar[idx];
+    atualizarLoading('Comprimindo foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
+    comprimirImagem(file, function(b64, mime, nome){
+      if(!b64){toast('Foto '+(idx+1)+' muito grande, ignorada');idx++;proximo();return;}
+      atualizarLoading('Enviando foto '+(idx+1)+'/'+fotosParaEnviar.length+'...');
+      var CHUNK=30000, chunks=[], ci=0;
+      for(var i=0;i<b64.length;i+=CHUNK) chunks.push(b64.substring(i,i+CHUNK));
+      var uid='ch_'+Date.now()+'_'+idx;
+      function envChunk(){
+        if(ci>=chunks.length){
+          chamarScript({acao:'finalizarFoto',dados:JSON.stringify({uploadId:uid,nome:nome,mime:mime,totalChunks:chunks.length}),t:Date.now()},
+          function(d){if(d.ok&&d.id)ids.push(d.id);idx++;proximo();});
+          return;
+        }
+        chamarScript({acao:'uploadChunk',dados:JSON.stringify({uploadId:uid,chunk:chunks[ci],idx:ci}),t:Date.now()+ci},
+        function(d){if(d.ok){ci++;envChunk();}else{idx++;proximo();}});
+      }
+      envChunk();
+    });
+  }
+  proximo();
+}
+
+function novoChamado(){
+  document.getElementById('sucesso').classList.remove('show');
+  document.getElementById('formulario').style.display='block';
+  document.getElementById('grupo').selectedIndex=0;
+  document.getElementById('subgrupo').innerHTML='<option value="">Selecione o grupo primeiro...</option>';
+  document.getElementById('descricao').value='';
   document.getElementById('impacto').value='';
   document.getElementById('urgencia').value='';
   document.getElementById('solicitante').value='';
